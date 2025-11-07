@@ -1,0 +1,187 @@
+{
+  "version": "1.0.0",
+  "description": "Priority resolution matrix for multi-code scenarios",
+  "last_updated": "2025-10-30",
+  
+  "resolution_rule": "When multiple codes apply to same claim, select code with LOWEST rank number (highest priority)",
+  
+  "priority_groups": {
+    "CRITICAL": {
+      "priority_level": 1,
+      "ranks": [1, 2, 3, 4, 5, 6, 7, 8],
+      "codes": [301, 302, 303, 304, 305, 306, 307, 308],
+      "category": "Pharmacy Issues",
+      "description": "Fundamental eligibility problems that immediately disqualify claims",
+      "business_impact": "HIGH - Claims cannot proceed without resolution",
+      "typical_resolution_days": 14
+    },
+    "HIGH": {
+      "priority_level": 2,
+      "ranks": [9, 10, 11, 12],
+      "codes": [401, 402, 403, 404],
+      "category": "Duplicate Issues",
+      "description": "Prevent double payment scenarios",
+      "business_impact": "HIGH - Financial risk of duplicate payments",
+      "typical_resolution_days": 7
+    },
+    "MEDIUM": {
+      "priority_level": 3,
+      "ranks": [13, 14, 15, 16],
+      "codes": [101, 102, 103, 104],
+      "category": "Claim Issues",
+      "description": "Quantity and data validation problems",
+      "business_impact": "MEDIUM - Data quality issues requiring correction",
+      "typical_resolution_days": 5
+    },
+    "LOWER": {
+      "priority_level": 4,
+      "ranks": [17, 18, 19, 20, 21],
+      "codes": [201, 202, 203, 204, 205],
+      "category": "Contracting Issues",
+      "description": "Coverage and eligibility verification",
+      "business_impact": "MEDIUM - Contract compliance and validation",
+      "typical_resolution_days": 10
+    },
+    "LOWEST": {
+      "priority_level": 5,
+      "ranks": [22, 23],
+      "codes": [501, 502],
+      "category": "Datafix Issues",
+      "description": "Timing and correction scenarios",
+      "business_impact": "LOW - Administrative adjustments",
+      "typical_resolution_days": 3
+    }
+  },
+  
+  "resolution_examples": [
+    {
+      "scenario": "340B + Formulary Issue",
+      "detected_codes": [
+        {"code": 301, "rank": 1, "description": "340B"},
+        {"code": 201, "rank": 17, "description": "Formulary"}
+      ],
+      "resolution": {
+        "selected_code": 301,
+        "selected_rank": 1,
+        "rationale": "340B (rank 1) has higher priority than Formulary (rank 17)",
+        "alternative_codes": [201],
+        "action": "Flag 340B issue first, formulary issue noted for secondary review"
+      }
+    },
+    {
+      "scenario": "Duplicate + Invalid Days Supply",
+      "detected_codes": [
+        {"code": 104, "rank": 16, "description": "RX ID Invalid"},
+        {"code": 102, "rank": 14, "description": "Days Supply Invalid"}
+      ],
+      "resolution": {
+        "selected_code": 102,
+        "selected_rank": 14,
+        "rationale": "Days Supply Invalid (rank 14) has higher priority than RX ID Invalid (rank 16)",
+        "alternative_codes": [104],
+        "action": "Fix days supply first, then validate RX ID"
+      }
+    },
+    {
+      "scenario": "Multiple Pharmacy Exclusions",
+      "detected_codes": [
+        {"code": 303, "rank": 3, "description": "Hospital Pharmacy"},
+        {"code": 306, "rank": 6, "description": "Excluded List"}
+      ],
+      "resolution": {
+        "selected_code": 303,
+        "selected_rank": 3,
+        "rationale": "Hospital Pharmacy (rank 3) has higher priority than Excluded List (rank 6)",
+        "alternative_codes": [306],
+        "action": "Both are exclusions but hospital status is more fundamental"
+      }
+    },
+    {
+      "scenario": "All Same Priority Group",
+      "detected_codes": [
+        {"code": 101, "rank": 13, "description": "Aberrant Quantity"},
+        {"code": 102, "rank": 14, "description": "Days Supply Invalid"}
+      ],
+      "resolution": {
+        "selected_code": 101,
+        "selected_rank": 13,
+        "rationale": "Within same priority group (MEDIUM), lowest rank wins",
+        "alternative_codes": [102],
+        "action": "Fix quantity issue first as it may impact days supply validation"
+      }
+    }
+  ],
+  
+  "implementation": {
+    "file": "core/enhanced_dispute_classifier.py",
+    "function": "_resolve_priority",
+    "lines": "350-380",
+    "algorithm": {
+      "step_1": "Collect all detected codes with their ranks",
+      "step_2": "Sort by rank (ascending - lowest number = highest priority)",
+      "step_3": "Select code with lowest rank number",
+      "step_4": "Store alternative codes for secondary review",
+      "step_5": "Return primary code with evidence trail"
+    }
+  },
+  
+  "edge_cases": {
+    "tie_scenario": {
+      "description": "Same rank number (should never happen with current design)",
+      "resolution": "Use code number as tiebreaker (lower code number wins)",
+      "example": "If somehow both rank 5, code 301 beats code 305"
+    },
+    "no_codes_detected": {
+      "description": "No dispute codes triggered",
+      "resolution": "Assign Code 999 (Clean/No Issue)",
+      "action": "Claim proceeds without dispute"
+    },
+    "all_codes_same_rank": {
+      "description": "Multiple codes with identical ranks",
+      "resolution": "Select first detected code, log warning for configuration review",
+      "action": "Review dispute code rank assignments"
+    }
+  },
+  
+  "confidence_scoring": {
+    "description": "Confidence level for priority resolution",
+    "factors": [
+      {
+        "factor": "Number of alternative codes",
+        "impact": "More alternatives = lower confidence in single-code resolution"
+      },
+      {
+        "factor": "Rank gap",
+        "impact": "Larger gap between primary and secondary = higher confidence"
+      },
+      {
+        "factor": "Priority group difference",
+        "impact": "Different priority groups = higher confidence in resolution"
+      }
+    ],
+    "thresholds": {
+      "high_confidence": "Rank gap >= 5 or different priority groups",
+      "medium_confidence": "Rank gap 2-4",
+      "low_confidence": "Rank gap 0-1 or multiple same-rank codes"
+    }
+  },
+  
+  "human_review_triggers": {
+    "automatic_escalation": [
+      "Multiple CRITICAL priority codes detected",
+      "Low confidence resolution (rank gap < 2)",
+      "Conflicting priority groups (e.g., 340B + Duplicate)"
+    ],
+    "optional_review": [
+      "Alternative codes exist but clear priority",
+      "MEDIUM or LOWER priority codes only"
+    ]
+  },
+  
+  "test_validation": {
+    "test_file": "tests/test_priority_resolution.py",
+    "coverage": "All priority group combinations",
+    "edge_cases_tested": ["tie_scenario", "no_codes", "same_rank"],
+    "status": "PASSING"
+  }
+}

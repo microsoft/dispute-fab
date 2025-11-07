@@ -1,0 +1,250 @@
+{
+  "version": "1.0.0",
+  "description": "NDC and Product Validation Rules (Code 204)",
+  "category": "Contracting Issue",
+  "priority_group": "LOWER",
+  "rank": 20,
+  "last_updated": "2025-11-05",
+  
+  "rule": {
+    "code": 204,
+    "rank": 20,
+    "name": "Product ID or NDC is Invalid",
+    "description": "National Drug Code (NDC) is missing, invalid format, or not found in drug database",
+    "category": "Contracting Issue",
+    "priority": "LOWER",
+    
+    "detection_logic": {
+      "primary_field": "DRUG_NDC",
+      "alternative_fields": [
+        "NDC",
+        "FILL_NDC_NBR",
+        "Product-Code",
+        "NDC Code",
+        "National Drug Code"
+      ],
+      "conditions": [
+        {
+          "check": "is_null",
+          "description": "Field is NULL or missing"
+        },
+        {
+          "check": "is_empty",
+          "description": "Field is empty string"
+        },
+        {
+          "check": "equals_nan",
+          "description": "Field contains 'nan' string"
+        },
+        {
+          "check": "length_validation",
+          "expected_length": 11,
+          "description": "NDC must be exactly 11 digits (5-4-2 format)"
+        }
+      ],
+      "python_logic": "if not ndc or str(ndc) == 'nan' or len(str(ndc)) != 11: return 204"
+    },
+    
+    "ndc_format": {
+      "standard": "11-digit format (5-4-2)",
+      "structure": {
+        "labeler_code": {
+          "position": [0, 5],
+          "digits": 5,
+          "description": "FDA-assigned manufacturer/distributor code"
+        },
+        "product_code": {
+          "position": [5, 9],
+          "digits": 4,
+          "description": "Specific drug product (strength, dosage form, formulation)"
+        },
+        "package_code": {
+          "position": [9, 11],
+          "digits": 2,
+          "description": "Package size and type"
+        }
+      },
+      "example": "12345-6789-01",
+      "display_format": "XXXXX-XXXX-XX",
+      "notes": "NDC may be stored with or without hyphens. Validation checks digit count only."
+    },
+    
+    "data_field": {
+      "name": "DRUG_NDC",
+      "type": "string",
+      "required": true,
+      "format": "11 digits (with or without hyphens)",
+      "pattern": "^\\d{5}-?\\d{4}-?\\d{2}$",
+      "description": "National Drug Code uniquely identifying the drug product"
+    },
+    
+    "test_cases": [
+      {
+        "name": "Missing NDC",
+        "input": {
+          "DRUG_NDC": null
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": true,
+          "reason": "NDC is null"
+        }
+      },
+      {
+        "name": "Empty string NDC",
+        "input": {
+          "DRUG_NDC": ""
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": true,
+          "reason": "NDC is empty"
+        }
+      },
+      {
+        "name": "NaN string",
+        "input": {
+          "DRUG_NDC": "nan"
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": true,
+          "reason": "NDC contains 'nan'"
+        }
+      },
+      {
+        "name": "Invalid length - too short",
+        "input": {
+          "DRUG_NDC": "1234567890"
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": true,
+          "reason": "NDC length (10) is not 11 digits"
+        }
+      },
+      {
+        "name": "Invalid length - too long",
+        "input": {
+          "DRUG_NDC": "123456789012"
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": true,
+          "reason": "NDC length (12) is not 11 digits"
+        }
+      },
+      {
+        "name": "Valid NDC - no hyphens",
+        "input": {
+          "DRUG_NDC": "12345678901"
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": false,
+          "reason": "NDC is valid 11-digit format"
+        }
+      },
+      {
+        "name": "Valid NDC - with hyphens (stored as text)",
+        "input": {
+          "DRUG_NDC": "12345-6789-01"
+        },
+        "expected_output": {
+          "code": 204,
+          "triggered": true,
+          "reason": "NDC with hyphens has length 13 (hyphens counted). NOTE: This is a known limitation - current implementation counts hyphens."
+        }
+      }
+    ],
+    
+    "known_issues": [
+      {
+        "issue": "Hyphenated NDCs counted as invalid",
+        "description": "Current implementation counts hyphens in length check",
+        "impact": "Valid NDCs like '12345-6789-01' flagged as invalid",
+        "workaround": "Store NDCs without hyphens in database",
+        "fix_required": "Update logic to: ndc_clean = str(ndc).replace('-', ''); if len(ndc_clean) != 11: return 204",
+        "priority": "HIGH"
+      }
+    ],
+    
+    "business_rationale": "NDC is essential for identifying the exact drug product, calculating rebates, and verifying formulary status. Invalid NDCs prevent proper pricing.",
+    
+    "resolution_guidance": {
+      "missing_ndc": "Check original pharmacy claim, verify data extraction",
+      "invalid_format": "Verify NDC against FDA database, check for transcription errors",
+      "not_in_database": "Update drug master file, verify NDC is active",
+      "resources": [
+        "FDA NDC Database: https://www.fda.gov/drugs/drug-approvals-and-databases/national-drug-code-directory",
+        "Internal drug master file"
+      ]
+    },
+    
+    "enhancement_opportunities": [
+      {
+        "enhancement": "NDC format normalization",
+        "description": "Strip hyphens before validation",
+        "benefit": "Prevent false positives on hyphenated NDCs",
+        "implementation": "ndc_digits = ''.join(c for c in str(ndc) if c.isdigit())"
+      },
+      {
+        "enhancement": "NDC database lookup",
+        "description": "Verify NDC exists in FDA database or internal master file",
+        "benefit": "Catch typos and invalid NDCs that pass format check",
+        "implementation": "Check against reference table of valid NDCs"
+      },
+      {
+        "enhancement": "NDC segmentation validation",
+        "description": "Validate each segment (labeler, product, package) separately",
+        "benefit": "More specific error messages for troubleshooting",
+        "implementation": "Parse and validate each segment of 5-4-2 format"
+      }
+    ],
+    
+    "related_codes": [
+      201,
+      203
+    ],
+    "related_codes_description": {
+      "201": "Formulary compliance requires valid NDC",
+      "203": "Product date range validation requires valid NDC"
+    },
+    
+    "implementation": {
+      "file": "core/enhanced_dispute_classifier.py",
+      "function": "_apply_business_rules",
+      "line_range": [268, 274],
+      "order": "Checked AFTER data quality rules (101-104) and BEFORE formulary checks (201)"
+    },
+    
+    "validation": {
+      "test_file": "tests/test_ndc_validation.py",
+      "coverage_required": "100%",
+      "test_data": "Use data/Masked_Invoice_Claims_Extract.csv for validation"
+    },
+    
+    "statistics": {
+      "total_claims_tested": 7684,
+      "code_204_occurrences": 2783,
+      "percentage": "36.2%",
+      "notes": "Most common dispute code. High occurrence suggests data quality issues in source systems.",
+      "top_vendors_affected": [
+        "Hvsq Tkrbcgf (1247 claims)",
+        "MW (508 claims)",
+        "IOMMH (423 claims)"
+      ]
+    },
+    
+    "data_quality_insights": {
+      "recommendation": "Implement NDC validation at data entry point",
+      "vendor_training": "Educate vendors on proper NDC formatting",
+      "system_enhancement": "Add NDC lookup service to catch errors earlier"
+    }
+  },
+  
+  "related_documentation": [
+    "docs/BUSINESS_RULES.md#contracting-issues",
+    "docs/HOW_BUSINESS_RULES_WORK.md#business-rules-application"
+  ]
+}

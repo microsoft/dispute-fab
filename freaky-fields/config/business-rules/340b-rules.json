@@ -1,0 +1,191 @@
+{
+  "version": "1.0.0",
+  "description": "340B-specific business logic for Code 301",
+  "last_updated": "2025-10-30",
+  "code": 301,
+  "rank": 1,
+  "priority": "CRITICAL",
+  "category": "Pharmacy Issue",
+  
+  "business_context": {
+    "program": "340B Drug Pricing Program",
+    "description": "Federal program allowing certain healthcare organizations to purchase outpatient drugs at significantly reduced prices",
+    "dispute_reason": "Manufacturers may dispute rebates to avoid duplicate discounts",
+    "regulatory_reference": "Section 340B of the Public Health Service Act"
+  },
+  
+  "detection_logic": {
+    "primary_field": "CLAIM_340B_IND",
+    "alternative_fields": [
+      "340B Indicator",
+      "340B_IND",
+      "340B Flag"
+    ],
+    "conditions": [
+      {
+        "check": "is_null",
+        "trigger": true,
+        "description": "Field is NULL - potential 340B claim"
+      },
+      {
+        "check": "is_empty",
+        "trigger": true,
+        "description": "Field is empty string - potential 340B claim"
+      },
+      {
+        "check": "equals",
+        "value": "Y",
+        "trigger": true,
+        "description": "Explicit Y value - confirmed 340B claim"
+      },
+      {
+        "check": "equals",
+        "value": "N",
+        "trigger": false,
+        "description": "Explicit N value - NOT a 340B claim"
+      }
+    ],
+    "python_logic": "claim_340b_ind = claim_data.get('CLAIM_340B_IND'); if claim_340b_ind in [None, '', 'Y']: return 301",
+    "implementation_note": "Conservative approach: flag NULL/empty as potential 340B to avoid missing exclusions",
+    "secondary_checks": [
+      {
+        "description": "Validate against excluded 340B pharmacy list",
+        "implementation": "future_enhancement",
+        "data_source": "HRSA 340B database"
+      },
+      {
+        "description": "Cross-reference with 340B entity database",
+        "implementation": "future_enhancement",
+        "data_source": "Internal pharmacy exclusion list"
+      }
+    ]
+  },
+  
+  "data_fields": {
+    "CLAIM_340B_IND": {
+      "type": "boolean/char",
+      "description": "340B program indicator",
+      "required": true,
+      "values": {
+        "NULL": "Potential 340B claim - flag for verification",
+        "empty": "Potential 340B claim - flag for verification",
+        "Y": "Confirmed 340B claim - highest priority exclusion",
+        "N": "Not a 340B claim"
+      }
+    },
+    "PHARMACY_ID": {
+      "type": "string",
+      "description": "NCPDP or NPI identifier",
+      "usage": "Cross-reference with 340B entity database"
+    }
+  },
+  
+  "priority_rationale": {
+    "rank": 1,
+    "reasoning": "Highest priority dispute - fundamental eligibility issue that immediately disqualifies claims",
+    "business_impact": "Prevents double discounts (manufacturer rebate + 340B discount)",
+    "financial_impact": "HIGH - significant cost avoidance for manufacturers"
+  },
+  
+  "implementation": {
+    "file": "core/enhanced_dispute_classifier.py",
+    "function": "_detect_340b",
+    "lines": "120-135",
+    "language": "python",
+    "pseudocode": "if CLAIM_340B_IND is NULL or CLAIM_340B_IND == '' or CLAIM_340B_IND == 'Y': return Code 301"
+  },
+  
+  "test_cases": [
+    {
+      "name": "Explicit 340B indicator",
+      "input": {
+        "CLAIM_340B_IND": "Y"
+      },
+      "expected_output": {
+        "code": 301,
+        "rank": 1,
+        "reason": "Confirmed 340B claim"
+      }
+    },
+    {
+      "name": "Null 340B indicator",
+      "input": {
+        "CLAIM_340B_IND": null
+      },
+      "expected_output": {
+        "code": 301,
+        "rank": 1,
+        "reason": "Potential 340B claim - needs verification"
+      }
+    },
+    {
+      "name": "Empty 340B indicator",
+      "input": {
+        "CLAIM_340B_IND": ""
+      },
+      "expected_output": {
+        "code": 301,
+        "rank": 1,
+        "reason": "Potential 340B claim - needs verification"
+      }
+    },
+    {
+      "name": "Non-340B claim",
+      "input": {
+        "CLAIM_340B_IND": "N"
+      },
+      "expected_output": {
+        "code": null,
+        "reason": "Not a 340B claim"
+      }
+    }
+  ],
+  
+  "human_review_requirements": {
+    "always_required": true,
+    "reason": "340B claims require verification against excluded pharmacy list and entity database",
+    "escalation_path": "Finance team → Legal review → Manufacturer dispute"
+  },
+  
+  "evidence_trail": {
+    "required_fields": [
+      "CLAIM_340B_IND value",
+      "PHARMACY_ID",
+      "Pharmacy name and type",
+      "340B entity verification status"
+    ],
+    "audit_requirements": "Complete documentation for manufacturer dispute resolution"
+  },
+  
+  "resolution_days": {
+    "typical": 14,
+    "complex": 30,
+    "description": "Days to resolve 340B disputes with manufacturer"
+  },
+  
+  "related_codes": [
+    {
+      "code": 302,
+      "description": "Government Pharmacy",
+      "relationship": "May overlap with 340B status"
+    },
+    {
+      "code": 303,
+      "description": "Hospital Pharmacy",
+      "relationship": "Hospital outpatient pharmacies often qualify for 340B"
+    }
+  ],
+  
+  "future_enhancements": [
+    {
+      "feature": "Automated 340B entity database lookup",
+      "priority": "HIGH",
+      "description": "Real-time verification against HRSA 340B database"
+    },
+    {
+      "feature": "Excluded pharmacy list integration",
+      "priority": "MEDIUM",
+      "description": "Maintain and cross-reference excluded 340B pharmacies"
+    }
+  ]
+}
