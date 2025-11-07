@@ -1,0 +1,163 @@
+{
+  "version": "1.1.0",
+  "description": "Formulary-specific business logic for Code 201",
+  "last_updated": "2025-11-05",
+  "code": 201,
+  "rank": 17,
+  "priority": "LOWER",
+  "category": "Contracting Issue",
+  
+  "detection_priority_order": [
+    "EXCLUSION_TYPE_CDE",
+    "COPAY_EXCLUSION_IND",
+    "FORMULARY_TYPE_CDE"
+  ],
+  
+  "rules": {
+    "v1.1.0": {
+      "description": "Priority fix - check explicit flags before formulary type code",
+      "date_applied": "2025-11-05",
+      "logic": {
+        "step_1": {
+          "check": "EXCLUSION_TYPE_CDE",
+          "condition": "not NULL and not empty",
+          "action": "return Code 201",
+          "priority": "HIGHEST",
+          "python_logic": "if claim_data.get('EXCLUSION_TYPE_CDE') and claim_data.get('EXCLUSION_TYPE_CDE') != '': codes.append(201)"
+        },
+        "step_2": {
+          "check": "COPAY_EXCLUSION_IND",
+          "condition": "equals 'Y' or equals 1 or equals 1.0",
+          "action": "return Code 201",
+          "priority": "HIGHEST",
+          "python_logic": "copay_flag = claim_data.get('COPAY_EXCLUSION_IND'); if copay_flag in ['Y', 1, 1.0]: codes.append(201)"
+        },
+        "step_3": {
+          "check": "FORMULARY_TYPE_CDE",
+          "condition": "equals 0",
+          "action": "return Code 201",
+          "priority": "FALLBACK",
+          "python_logic": "formulary_code = claim_data.get('FORMULARY_TYPE_CDE'); if formulary_code == 0: codes.append(201)"
+        }
+      },
+      "complete_python_implementation": "# Step 1: Check explicit flags (HIGHEST PRIORITY)\nformulary_nc_flag = claim_data.get('FORMULARY NON-COMPLIANCE')\nformulary_nc_policy_flag = claim_data.get('FORMULARY NON-COMPLIANCE POLICY')\n\nif formulary_nc_flag == 1.0 or formulary_nc_flag == 1 or formulary_nc_flag == '1':\n    codes.append(201)  # Explicit non-compliance flag\nelif formulary_nc_policy_flag == 1.0 or formulary_nc_policy_flag == 1 or formulary_nc_policy_flag == '1':\n    codes.append(201)  # Explicit non-compliance policy flag\nelse:\n    # Step 2: Check formulary code (FALLBACK)\n    formulary_code = None\n    for key in ['FORMULARY_TYPE_CDE', 'Formulary-Code', 'Formulary Code', 'FORMULARY_STATUS']:\n        if key in claim_data:\n            formulary_code = claim_data[key]\n            break\n    \n    if formulary_code is not None and str(formulary_code) not in ['nan', '']:\n        try:\n            code_val = int(float(formulary_code))\n            if code_val == 0:\n                codes.append(201)  # Non-formulary\n        except (ValueError, TypeError):\n            # Check text values\n            formulary_str = str(formulary_code).lower()\n            if any(indicator in formulary_str for indicator in ['non-formulary', 'not covered', 'excluded']):\n                codes.append(201)",
+      "rationale": "Explicit exclusion flags take precedence over formulary tier codes to ensure accurate classification"
+    },
+    "v1.0.0": {
+      "description": "Original formulary detection - only checked FORMULARY_TYPE_CDE",
+      "issue": "Missed claims with explicit exclusion flags but non-zero formulary type codes",
+      "deprecated": true
+    }
+  },
+  
+  "data_fields": {
+    "EXCLUSION_TYPE_CDE": {
+      "type": "string",
+      "description": "Explicit exclusion indicator",
+      "priority": "CHECK_FIRST",
+      "values": {
+        "NULL": "No explicit exclusion",
+        "empty": "No explicit exclusion",
+        "non-empty": "Explicit exclusion present - return Code 201"
+      }
+    },
+    "COPAY_EXCLUSION_IND": {
+      "type": "boolean/char",
+      "description": "Copay exclusion flag",
+      "priority": "CHECK_FIRST",
+      "values": {
+        "Y": "Copay excluded - return Code 201",
+        "N": "Not excluded",
+        "NULL": "Not excluded"
+      }
+    },
+    "FORMULARY_TYPE_CDE": {
+      "type": "integer",
+      "description": "Formulary tier code",
+      "priority": "FALLBACK",
+      "values": {
+        "0": "Non-formulary - return Code 201",
+        "1-5": "Formulary tiers (1=preferred, 5=specialty)"
+      }
+    }
+  },
+  
+  "affected_vendors": [
+    {
+      "name": "Hvsq Tkrbcgf",
+      "impact": "55 claims corrected from Code 204 to Code 201",
+      "reason": "Had explicit EXCLUSION_TYPE_CDE or COPAY_EXCLUSION_IND flags but non-zero FORMULARY_TYPE_CDE"
+    }
+  ],
+  
+  "implementation": {
+    "file": "core/enhanced_dispute_classifier.py",
+    "function": "_detect_formulary_non_compliance",
+    "lines": "276-315",
+    "version": "1.1.0"
+  },
+  
+  "test_cases": [
+    {
+      "name": "Explicit EXCLUSION_TYPE_CDE with non-zero formulary",
+      "input": {
+        "EXCLUSION_TYPE_CDE": "X",
+        "COPAY_EXCLUSION_IND": null,
+        "FORMULARY_TYPE_CDE": 3
+      },
+      "expected_output": {
+        "code": 201,
+        "reason": "Explicit exclusion flag takes priority"
+      }
+    },
+    {
+      "name": "COPAY_EXCLUSION_IND = Y",
+      "input": {
+        "EXCLUSION_TYPE_CDE": null,
+        "COPAY_EXCLUSION_IND": "Y",
+        "FORMULARY_TYPE_CDE": 2
+      },
+      "expected_output": {
+        "code": 201,
+        "reason": "Copay exclusion flag"
+      }
+    },
+    {
+      "name": "FORMULARY_TYPE_CDE = 0 (original logic)",
+      "input": {
+        "EXCLUSION_TYPE_CDE": null,
+        "COPAY_EXCLUSION_IND": null,
+        "FORMULARY_TYPE_CDE": 0
+      },
+      "expected_output": {
+        "code": 201,
+        "reason": "Non-formulary tier"
+      }
+    },
+    {
+      "name": "No formulary issues",
+      "input": {
+        "EXCLUSION_TYPE_CDE": null,
+        "COPAY_EXCLUSION_IND": "N",
+        "FORMULARY_TYPE_CDE": 2
+      },
+      "expected_output": {
+        "code": null,
+        "reason": "Formulary compliant"
+      }
+    }
+  ],
+  
+  "regression_validation": {
+    "script": "tests/test_formulary_fix.py",
+    "date_validated": "2025-11-05",
+    "status": "PASSED",
+    "claims_tested": 55
+  },
+  
+  "business_impact": {
+    "financial": "Ensures proper rebate calculation for non-formulary drugs",
+    "compliance": "Accurate classification required for manufacturer dispute resolution",
+    "operational": "Reduces manual review burden by correctly identifying formulary issues"
+  }
+}

@@ -1,0 +1,428 @@
+{
+  "version": "1.0.0",
+  "description": "Data Quality Validation Rules (Codes 101-104)",
+  "category": "Claim Issues",
+  "priority_group": "MEDIUM",
+  "rank_range": [13, 16],
+  "last_updated": "2025-11-05",
+  
+  "rules": {
+    "101": {
+      "code": 101,
+      "rank": 13,
+      "name": "Aberrant Quantity",
+      "description": "Dispensed quantity is outside acceptable range",
+      "category": "Claim Issue",
+      "priority": "MEDIUM",
+      
+      "detection_logic": {
+        "primary_field": "QUANTITY",
+        "alternative_fields": [
+          "Quantity",
+          "FILL_QTY",
+          "Total Quantity",
+          "Dispensed Quantity"
+        ],
+        "conditions": [
+          {
+            "operator": "less_than",
+            "threshold": 0,
+            "description": "Negative quantity"
+          },
+          {
+            "operator": "greater_than",
+            "threshold": 1000,
+            "description": "Quantity exceeds maximum"
+          }
+        ],
+        "python_logic": "if quantity < 0 or quantity > 1000: return 101"
+      },
+      
+      "data_field": {
+        "name": "QUANTITY",
+        "type": "float",
+        "required": true,
+        "valid_range": [0, 1000],
+        "description": "Number of units dispensed"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Negative quantity",
+          "input": {
+            "QUANTITY": -5
+          },
+          "expected_output": {
+            "code": 101,
+            "triggered": true,
+            "reason": "Quantity (-5) is less than 0"
+          }
+        },
+        {
+          "name": "Excessive quantity",
+          "input": {
+            "QUANTITY": 1500
+          },
+          "expected_output": {
+            "code": 101,
+            "triggered": true,
+            "reason": "Quantity (1500) exceeds maximum of 1000"
+          }
+        },
+        {
+          "name": "Valid quantity",
+          "input": {
+            "QUANTITY": 30
+          },
+          "expected_output": {
+            "code": 101,
+            "triggered": false,
+            "reason": "Quantity within valid range"
+          }
+        },
+        {
+          "name": "Edge case - zero",
+          "input": {
+            "QUANTITY": 0
+          },
+          "expected_output": {
+            "code": 101,
+            "triggered": false,
+            "reason": "Zero is valid (not filled)"
+          }
+        }
+      ],
+      
+      "business_rationale": "Quantities outside normal ranges indicate data entry errors, fraud, or unusual dispensing patterns that require review.",
+      "resolution_guidance": "Review prescription details, verify with pharmacy, check for decimal point errors"
+    },
+    
+    "102": {
+      "code": 102,
+      "rank": 14,
+      "name": "Days Supply is Invalid",
+      "description": "Days supply is missing, zero, negative, or exceeds maximum",
+      "category": "Claim Issue",
+      "priority": "MEDIUM",
+      
+      "detection_logic": {
+        "primary_field": "DAYS_SUPPLY",
+        "alternative_fields": [
+          "Days Supply",
+          "FILL_DAYS_SUPPLY_QTY",
+          "Days-Supply",
+          "Supply Days"
+        ],
+        "conditions": [
+          {
+            "operator": "less_than_or_equal",
+            "threshold": 0,
+            "description": "Days supply is zero or negative"
+          },
+          {
+            "operator": "greater_than",
+            "threshold": 365,
+            "description": "Days supply exceeds one year"
+          }
+        ],
+        "python_logic": "if days_supply <= 0 or days_supply > 365: return 102"
+      },
+      
+      "data_field": {
+        "name": "DAYS_SUPPLY",
+        "type": "integer",
+        "required": true,
+        "valid_range": [1, 365],
+        "description": "Number of days the prescription should last"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Zero days supply",
+          "input": {
+            "DAYS_SUPPLY": 0
+          },
+          "expected_output": {
+            "code": 102,
+            "triggered": true,
+            "reason": "Days supply (0) is invalid"
+          }
+        },
+        {
+          "name": "Negative days supply",
+          "input": {
+            "DAYS_SUPPLY": -10
+          },
+          "expected_output": {
+            "code": 102,
+            "triggered": true,
+            "reason": "Days supply (-10) is negative"
+          }
+        },
+        {
+          "name": "Exceeds maximum",
+          "input": {
+            "DAYS_SUPPLY": 400
+          },
+          "expected_output": {
+            "code": 102,
+            "triggered": true,
+            "reason": "Days supply (400) exceeds maximum of 365"
+          }
+        },
+        {
+          "name": "Valid 30-day supply",
+          "input": {
+            "DAYS_SUPPLY": 30
+          },
+          "expected_output": {
+            "code": 102,
+            "triggered": false,
+            "reason": "Days supply within valid range"
+          }
+        },
+        {
+          "name": "Valid 90-day supply",
+          "input": {
+            "DAYS_SUPPLY": 90
+          },
+          "expected_output": {
+            "code": 102,
+            "triggered": false,
+            "reason": "Days supply within valid range"
+          }
+        }
+      ],
+      
+      "business_rationale": "Days supply is critical for rebate calculations. Invalid values prevent accurate pricing and rebate determination.",
+      "resolution_guidance": "Verify prescription instructions, check pharmacy dispensing records, confirm with prescriber"
+    },
+    
+    "103": {
+      "code": 103,
+      "rank": 15,
+      "name": "Units per Day Exceeds Limit",
+      "description": "Daily dosage (quantity/days supply) exceeds maximum safe limit",
+      "category": "Claim Issue",
+      "priority": "MEDIUM",
+      
+      "detection_logic": {
+        "required_fields": ["QUANTITY", "DAYS_SUPPLY"],
+        "calculation": "units_per_day = QUANTITY / DAYS_SUPPLY",
+        "conditions": [
+          {
+            "operator": "greater_than",
+            "threshold": 10,
+            "description": "Daily units exceed safety threshold"
+          },
+          {
+            "operator": "division_by_zero_check",
+            "description": "Days supply must be greater than 0"
+          }
+        ],
+        "python_logic": "if days_supply > 0 and (quantity / days_supply) > 10: return 103"
+      },
+      
+      "data_fields": {
+        "QUANTITY": {
+          "type": "float",
+          "required": true,
+          "description": "Total dispensed quantity"
+        },
+        "DAYS_SUPPLY": {
+          "type": "integer",
+          "required": true,
+          "description": "Days the prescription should last"
+        }
+      },
+      
+      "calculation": {
+        "formula": "units_per_day = QUANTITY / DAYS_SUPPLY",
+        "max_threshold": 10,
+        "unit": "units per day",
+        "rationale": "Most medications should not exceed 10 units per day for safety"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Excessive daily dosage",
+          "input": {
+            "QUANTITY": 150,
+            "DAYS_SUPPLY": 10
+          },
+          "calculation": "150 / 10 = 15 units/day",
+          "expected_output": {
+            "code": 103,
+            "triggered": true,
+            "reason": "Units per day (15) exceeds limit of 10"
+          }
+        },
+        {
+          "name": "Valid daily dosage",
+          "input": {
+            "QUANTITY": 90,
+            "DAYS_SUPPLY": 30
+          },
+          "calculation": "90 / 30 = 3 units/day",
+          "expected_output": {
+            "code": 103,
+            "triggered": false,
+            "reason": "Units per day within acceptable range"
+          }
+        },
+        {
+          "name": "Edge case - exactly at limit",
+          "input": {
+            "QUANTITY": 100,
+            "DAYS_SUPPLY": 10
+          },
+          "calculation": "100 / 10 = 10 units/day",
+          "expected_output": {
+            "code": 103,
+            "triggered": false,
+            "reason": "Units per day exactly at limit (not exceeding)"
+          }
+        },
+        {
+          "name": "Division by zero protection",
+          "input": {
+            "QUANTITY": 100,
+            "DAYS_SUPPLY": 0
+          },
+          "expected_output": {
+            "code": 103,
+            "triggered": false,
+            "reason": "Division by zero avoided, Code 102 would trigger instead"
+          }
+        }
+      ],
+      
+      "business_rationale": "Excessive daily dosages may indicate dispensing errors, prescription errors, or potential drug diversion.",
+      "resolution_guidance": "Review prescription directions, verify pharmacist interpretation, check for compounded medications",
+      "related_codes": [101, 102],
+      "notes": "This rule depends on Codes 101 and 102 being checked first to ensure valid inputs"
+    },
+    
+    "104": {
+      "code": 104,
+      "rank": 16,
+      "name": "RX ID is Invalid",
+      "description": "Prescription number is missing, null, or invalid",
+      "category": "Claim Issue",
+      "priority": "MEDIUM",
+      
+      "detection_logic": {
+        "primary_field": "PRESCRIPTION_ID",
+        "alternative_fields": [
+          "RX ID",
+          "RX_NBR",
+          "Prescription-Number",
+          "RX Number",
+          "Prescription ID"
+        ],
+        "conditions": [
+          {
+            "check": "is_null",
+            "description": "Field is NULL or missing"
+          },
+          {
+            "check": "is_empty",
+            "description": "Field is empty string"
+          },
+          {
+            "check": "equals_nan",
+            "description": "Field contains 'nan' string"
+          }
+        ],
+        "python_logic": "if not rx_id or str(rx_id) == 'nan': return 104"
+      },
+      
+      "data_field": {
+        "name": "PRESCRIPTION_ID",
+        "type": "string",
+        "required": true,
+        "format": "alphanumeric",
+        "min_length": 1,
+        "description": "Unique prescription identifier"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Missing RX ID",
+          "input": {
+            "PRESCRIPTION_ID": null
+          },
+          "expected_output": {
+            "code": 104,
+            "triggered": true,
+            "reason": "RX ID is null"
+          }
+        },
+        {
+          "name": "Empty string RX ID",
+          "input": {
+            "PRESCRIPTION_ID": ""
+          },
+          "expected_output": {
+            "code": 104,
+            "triggered": true,
+            "reason": "RX ID is empty"
+          }
+        },
+        {
+          "name": "NaN string",
+          "input": {
+            "PRESCRIPTION_ID": "nan"
+          },
+          "expected_output": {
+            "code": 104,
+            "triggered": true,
+            "reason": "RX ID contains 'nan'"
+          }
+        },
+        {
+          "name": "Valid RX ID",
+          "input": {
+            "PRESCRIPTION_ID": "RX123456"
+          },
+          "expected_output": {
+            "code": 104,
+            "triggered": false,
+            "reason": "RX ID is valid"
+          }
+        }
+      ],
+      
+      "business_rationale": "Prescription ID is required to uniquely identify claims and prevent duplicates. Missing IDs prevent proper claim tracking.",
+      "resolution_guidance": "Contact pharmacy for original prescription number, verify data extraction from source system",
+      "impact": "Claims without valid RX IDs cannot be processed or reconciled"
+    }
+  },
+  
+  "implementation": {
+    "file": "core/enhanced_dispute_classifier.py",
+    "function": "_apply_business_rules",
+    "line_range": [240, 285],
+    "order": "These rules are checked AFTER pharmacy exclusions (301-308) but BEFORE formulary checks (201)"
+  },
+  
+  "validation": {
+    "test_file": "tests/test_data_quality_rules.py",
+    "coverage_required": "100%",
+    "test_data": "Use data/Masked_Invoice_Claims_Extract.csv for validation"
+  },
+  
+  "statistics": {
+    "total_claims_tested": 7684,
+    "code_101_occurrences": 0,
+    "code_102_occurrences": 12,
+    "code_103_occurrences": 0,
+    "code_104_occurrences": 89,
+    "most_common": "104 (RX ID Invalid)"
+  },
+  
+  "related_documentation": [
+    "docs/BUSINESS_RULES.md#data-quality-issues",
+    "docs/HOW_BUSINESS_RULES_WORK.md#business-rules-application"
+  ]
+}

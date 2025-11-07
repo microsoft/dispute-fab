@@ -1,0 +1,33 @@
+# SeeHealth AI Claims Triage - Python Dependencies
+# Python 3.11+ required
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+
+# Visualization
+plotly>=5.17.0
+
+# Azure SDKs
+openai>=1.0.0
+azure-identity>=1.15.0
+azure-keyvault-secrets>=4.7.0
+azure-storage-blob>=12.19.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# API Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.9.0
+python-multipart>=0.0.6
+
+# Type hints and validation
+dataclasses-json>=0.6.0
+
+# Optional: Jupyter notebook support (for demo_agent.ipynb)
+jupyter>=1.0.0
+ipykernel>=6.25.0
+pytest>=8.2.0
