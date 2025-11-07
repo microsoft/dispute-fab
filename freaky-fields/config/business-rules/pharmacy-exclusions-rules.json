@@ -1,0 +1,461 @@
+{
+  "version": "1.0.0",
+  "description": "Pharmacy Exclusion Rules (Codes 302-308)",
+  "category": "Pharmacy Issue",
+  "priority_group": "CRITICAL",
+  "rank_range": [2, 8],
+  "last_updated": "2025-11-05",
+  
+  "overview": {
+    "description": "Pharmacy exclusion rules identify pharmacies that are excluded from rebate programs",
+    "priority": "CRITICAL (Ranks 2-8) - Only 340B (Rank 1) has higher priority",
+    "rationale": "Pharmacy exclusions prevent double discounts and ensure compliance with program rules",
+    "implementation_status": "NOT CURRENTLY IMPLEMENTED - Detection logic documented for future implementation"
+  },
+  
+  "rules": {
+    "302": {
+      "code": 302,
+      "rank": 2,
+      "name": "Government Pharmacy",
+      "description": "Government-owned pharmacies excluded from rebates",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "SERVICE_TYPE_CDE",
+        "alternative_fields": [
+          "Pharmacy Type",
+          "Facility Type",
+          "Service Type"
+        ],
+        "conditions": [
+          {
+            "check": "equals",
+            "value": "G",
+            "description": "Government pharmacy indicator"
+          },
+          {
+            "check": "pharmacy_name_pattern",
+            "patterns": ["VA ", "Veterans Affairs", "Department of Defense", "DoD", "Military"],
+            "description": "Government facility name patterns"
+          }
+        ],
+        "python_logic": "service_type = claim_data.get('SERVICE_TYPE_CDE'); if service_type == 'G': return 302",
+        "data_source": "Government pharmacy list (future enhancement)"
+      },
+      
+      "test_cases": [
+        {
+          "name": "VA pharmacy",
+          "input": {
+            "SERVICE_TYPE_CDE": "G",
+            "PHARMACY_NAME": "VA Medical Center"
+          },
+          "expected_output": {
+            "code": 302,
+            "triggered": true
+          }
+        }
+      ]
+    },
+    
+    "303": {
+      "code": 303,
+      "rank": 3,
+      "name": "Hospital Pharmacy",
+      "description": "Hospital-based pharmacies with special rules",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "SERVICE_TYPE_CDE",
+        "conditions": [
+          {
+            "check": "equals",
+            "value": "I",
+            "description": "Institutional service type (hospital)"
+          },
+          {
+            "check": "equals",
+            "value": "H",
+            "description": "Hospital indicator"
+          }
+        ],
+        "python_logic": "service_type = claim_data.get('SERVICE_TYPE_CDE'); if service_type in ['I', 'H']: return 303",
+        "notes": "Hospital pharmacies may have different rebate agreements"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Hospital institutional pharmacy",
+          "input": {
+            "SERVICE_TYPE_CDE": "I"
+          },
+          "expected_output": {
+            "code": 303,
+            "triggered": true
+          }
+        }
+      ]
+    },
+    
+    "304": {
+      "code": 304,
+      "rank": 4,
+      "name": "Long Term Care and Nursing Home Pharmacies",
+      "description": "LTC/Nursing home pharmacy identification",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "SERVICE_TYPE_CDE",
+        "conditions": [
+          {
+            "check": "equals",
+            "value": "L",
+            "description": "Long-term care indicator"
+          },
+          {
+            "check": "equals",
+            "value": "N",
+            "description": "Nursing home indicator"
+          }
+        ],
+        "secondary_checks": [
+          {
+            "field": "PHARMACY_NAME",
+            "patterns": ["Long Term Care", "LTC", "Nursing Home", "Skilled Nursing"],
+            "description": "LTC facility name patterns"
+          }
+        ],
+        "python_logic": "service_type = claim_data.get('SERVICE_TYPE_CDE'); if service_type in ['L', 'N']: return 304"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Long-term care pharmacy",
+          "input": {
+            "SERVICE_TYPE_CDE": "L"
+          },
+          "expected_output": {
+            "code": 304,
+            "triggered": true
+          }
+        }
+      ]
+    },
+    
+    "305": {
+      "code": 305,
+      "rank": 5,
+      "name": "Pharmacy ID is Invalid",
+      "description": "Validate pharmacy identifiers (NCPDP ID or NPI)",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "PHARMACY_ID",
+        "alternative_fields": [
+          "NCPDP_ID",
+          "NPI",
+          "Pharmacy Number"
+        ],
+        "conditions": [
+          {
+            "check": "is_null",
+            "description": "Pharmacy ID is missing"
+          },
+          {
+            "check": "is_empty",
+            "description": "Pharmacy ID is empty"
+          },
+          {
+            "check": "invalid_format",
+            "ncpdp_length": 7,
+            "npi_length": 10,
+            "description": "NCPDP must be 7 digits, NPI must be 10 digits"
+          }
+        ],
+        "python_logic": "pharmacy_id = claim_data.get('PHARMACY_ID'); if not pharmacy_id or (len(str(pharmacy_id)) not in [7, 10]): return 305"
+      },
+      
+      "pharmacy_id_formats": {
+        "NCPDP": {
+          "description": "National Council for Prescription Drug Programs ID",
+          "length": 7,
+          "format": "7 digits",
+          "example": "1234567"
+        },
+        "NPI": {
+          "description": "National Provider Identifier",
+          "length": 10,
+          "format": "10 digits",
+          "example": "1234567890"
+        }
+      },
+      
+      "test_cases": [
+        {
+          "name": "Missing pharmacy ID",
+          "input": {
+            "PHARMACY_ID": null
+          },
+          "expected_output": {
+            "code": 305,
+            "triggered": true
+          }
+        },
+        {
+          "name": "Valid NCPDP",
+          "input": {
+            "PHARMACY_ID": "1234567"
+          },
+          "expected_output": {
+            "code": 305,
+            "triggered": false
+          }
+        },
+        {
+          "name": "Valid NPI",
+          "input": {
+            "PHARMACY_ID": "1234567890"
+          },
+          "expected_output": {
+            "code": 305,
+            "triggered": false
+          }
+        }
+      ]
+    },
+    
+    "306": {
+      "code": 306,
+      "rank": 6,
+      "name": "Pharmacy in Excluded List",
+      "description": "Most common pharmacy exclusion - check against exclusion list",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "PHARMACY_ID",
+        "method": "database_lookup",
+        "data_source": "data/reference/excluded_pharmacies.csv (future)",
+        "conditions": [
+          {
+            "check": "in_exclusion_list",
+            "description": "Pharmacy ID found in master exclusion list"
+          }
+        ],
+        "python_logic": "pharmacy_id = claim_data.get('PHARMACY_ID'); if pharmacy_id in excluded_pharmacy_list: return 306"
+      },
+      
+      "implementation_requirements": {
+        "data_file": "data/reference/excluded_pharmacies.csv",
+        "columns": ["PHARMACY_ID", "EXCLUSION_REASON", "EFFECTIVE_DATE", "END_DATE"],
+        "update_frequency": "Monthly",
+        "source": "Contract management system"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Pharmacy in exclusion list",
+          "input": {
+            "PHARMACY_ID": "9999999"
+          },
+          "setup": "Add '9999999' to exclusion list",
+          "expected_output": {
+            "code": 306,
+            "triggered": true
+          }
+        }
+      ]
+    },
+    
+    "307": {
+      "code": 307,
+      "rank": 7,
+      "name": "Pharmacy in Excluded State",
+      "description": "Geographic restrictions - state-level exclusions",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "PHARMACY_STATE",
+        "alternative_fields": [
+          "State",
+          "STATE_CDE"
+        ],
+        "method": "lookup",
+        "data_source": "config/excluded_states.json",
+        "python_logic": "pharmacy_state = claim_data.get('PHARMACY_STATE'); if pharmacy_state in EXCLUDED_STATES: return 307"
+      },
+      
+      "excluded_states_example": {
+        "note": "This is configuration-driven, not hardcoded",
+        "sample": ["PR", "GU", "VI"],
+        "description": "U.S. territories may have different rebate rules"
+      },
+      
+      "test_cases": [
+        {
+          "name": "Pharmacy in excluded state",
+          "input": {
+            "PHARMACY_STATE": "PR"
+          },
+          "expected_output": {
+            "code": 307,
+            "triggered": true
+          }
+        }
+      ]
+    },
+    
+    "308": {
+      "code": 308,
+      "rank": 8,
+      "name": "Pharmacy Service Type is Invalid",
+      "description": "Validate service type code",
+      "category": "Pharmacy Issue",
+      "priority": "CRITICAL",
+      
+      "detection_logic": {
+        "primary_field": "SERVICE_TYPE_CDE",
+        "valid_values": ["R", "M", "I", "X"],
+        "conditions": [
+          {
+            "check": "not_in_valid_list",
+            "description": "Service type is not R, M, I, or X"
+          },
+          {
+            "check": "is_null",
+            "description": "Service type is missing"
+          }
+        ],
+        "python_logic": "service_type = claim_data.get('SERVICE_TYPE_CDE'); if service_type not in ['R', 'M', 'I', 'X']: return 308"
+      },
+      
+      "service_type_codes": {
+        "R": {
+          "description": "Retail",
+          "examples": "Chain pharmacies, independent pharmacies"
+        },
+        "M": {
+          "description": "Mail Order",
+          "examples": "Home delivery pharmacies"
+        },
+        "I": {
+          "description": "Institutional",
+          "examples": "Hospital pharmacies, long-term care"
+        },
+        "X": {
+          "description": "Other/Specialty",
+          "examples": "Compounding pharmacies, specialty pharmacies"
+        }
+      },
+      
+      "test_cases": [
+        {
+          "name": "Invalid service type",
+          "input": {
+            "SERVICE_TYPE_CDE": "Z"
+          },
+          "expected_output": {
+            "code": 308,
+            "triggered": true
+          }
+        },
+        {
+          "name": "Valid retail",
+          "input": {
+            "SERVICE_TYPE_CDE": "R"
+          },
+          "expected_output": {
+            "code": 308,
+            "triggered": false
+          }
+        }
+      ]
+    }
+  },
+  
+  "implementation_status": {
+    "current": "NOT IMPLEMENTED",
+    "reason": "Pharmacy exclusion detection requires reference data files (pharmacy lists, state exclusions) that are not yet available",
+    "blocking_requirements": [
+      "Excluded pharmacy master list",
+      "340B entity database",
+      "Government pharmacy list",
+      "State exclusion configuration"
+    ],
+    "estimated_effort": "2-3 days to implement once data sources available"
+  },
+  
+  "implementation_plan": {
+    "phase_1": {
+      "description": "Data collection",
+      "tasks": [
+        "Obtain excluded pharmacy list from contract management",
+        "Download HRSA 340B database",
+        "Compile government pharmacy list",
+        "Define state exclusions"
+      ]
+    },
+    "phase_2": {
+      "description": "Code implementation",
+      "tasks": [
+        "Add _detect_pharmacy_exclusions() method to classifier",
+        "Load reference data files on initialization",
+        "Implement lookup logic for each code (302-308)",
+        "Add pharmacy ID validation"
+      ]
+    },
+    "phase_3": {
+      "description": "Testing and validation",
+      "tasks": [
+        "Create test cases with known excluded pharmacies",
+        "Validate against historical data",
+        "Performance testing with large pharmacy lists"
+      ]
+    }
+  },
+  
+  "data_requirements": {
+    "excluded_pharmacies": {
+      "file": "data/reference/excluded_pharmacies.csv",
+      "columns": ["PHARMACY_ID", "PHARMACY_NAME", "EXCLUSION_REASON", "EFFECTIVE_DATE", "END_DATE"],
+      "update_frequency": "Monthly",
+      "estimated_size": "1000-5000 pharmacies"
+    },
+    "340b_entities": {
+      "file": "data/reference/340b_entities.csv",
+      "source": "HRSA 340B database",
+      "columns": ["PHARMACY_ID", "ENTITY_NAME", "340B_ID", "EFFECTIVE_DATE"]
+    },
+    "government_pharmacies": {
+      "file": "data/reference/government_pharmacies.csv",
+      "columns": ["PHARMACY_ID", "AGENCY", "FACILITY_NAME"]
+    },
+    "excluded_states": {
+      "file": "config/excluded_states.json",
+      "format": "JSON array of state codes"
+    }
+  },
+  
+  "related_codes": [
+    301
+  ],
+  "related_codes_description": {
+    "301": "340B exclusion (Rank 1) takes priority over all other pharmacy exclusions"
+  },
+  
+  "statistics": {
+    "note": "Cannot provide statistics as these codes are not currently detected",
+    "expected_impact": "Once implemented, may flag 5-10% of claims as pharmacy exclusions"
+  },
+  
+  "related_documentation": [
+    "docs/BUSINESS_RULES.md#pharmacy-exclusions",
+    "docs/HOW_BUSINESS_RULES_WORK.md"
+  ]
+}

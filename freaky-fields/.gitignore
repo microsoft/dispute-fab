@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# Azure
+.env
+.env.local
+.azure/
+# azure_config.py is now safe to commit (uses env vars)
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files (large)
+data/*.csv
+data/*.xlsx
+data/*.xls
+outputs/*.xlsx
+outputs/*.html
+outputs/*.json
+
+# Node / Frontend artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.next/
+
+# Coverage / reports
+coverage/
+frontend/coverage/
+
+# Fabric workspace
+fabric/
+
+# Temporary
+*.tmp
+*.bak
+*.orig
+
+# Do not commit local env overrides
+frontend/.env
+
+# Logs
+*.log
+logs/
+
+# Secrets
+secrets/
+*.pem
+*.key
+*.pfx
+
+# Bicep generated
+*.json.log
+
+# Keep structure files but ignore content
+!data/.gitkeep
+!outputs/.gitkeep
+!infra/*.bicep
+!infra/*.json
+!infra/*.sh
+!infra/README.md

@@ -1,0 +1,461 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "4082495088037879722"
+    }
+  },
+  "parameters": {
+    "environment": {
+      "type": "string",
+      "defaultValue": "dev",
+      "allowedValues": [
+        "dev",
+        "test",
+        "prod"
+      ],
+      "metadata": {
+        "description": "Environment name (dev, test, prod)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources"
+      }
+    },
+    "uniqueSuffix": {
+      "type": "string",
+      "defaultValue": "[uniqueString(resourceGroup().id)]",
+      "metadata": {
+        "description": "Unique suffix for resource names (auto-generated if empty)"
+      }
+    },
+    "adminEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Your email for alerts and notifications"
+      }
+    },
+    "enableDataFactory": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Azure Data Factory for orchestration"
+      }
+    },
+    "enableContainerRegistry": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Container Registry for containerized workloads"
+      }
+    }
+  },
+  "variables": {
+    "resourcePrefix": "[format('seehealth-{0}', parameters('environment'))]",
+    "tags": {
+      "Environment": "[parameters('environment')]",
+      "Project": "SeeHealth Claims Triage",
+      "ManagedBy": "Bicep"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "OpenAI",
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "[format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))]",
+        "networkAcls": {
+          "defaultAction": "Allow"
+        },
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')), 'gpt-5-mini')]",
+      "sku": {
+        "name": "GlobalStandard",
+        "capacity": 50
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "gpt-5-mini",
+          "version": "2025-08-07"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')), 'gpt-4o')]",
+      "sku": {
+        "name": "Standard",
+        "capacity": 30
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "gpt-4o",
+          "version": "2024-11-20"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/deployments', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')), 'gpt-5-mini')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "isHnsEnabled": true,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true,
+        "allowBlobPublicAccess": false,
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "bypass": "AzureServices"
+        },
+        "encryption": {
+          "services": {
+            "blob": {
+              "enabled": true
+            },
+            "file": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default')]",
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default', 'vendor-data')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default', 'processed-data')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default', 'crosswalks')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default', 'reference-data')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default', 'outputs')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[format('kv-seehealth-{0}', parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true,
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "bypass": "AzureServices"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', format('kv-seehealth-{0}', parameters('uniqueSuffix')), 'OpenAI-ApiKey')]",
+      "properties": {
+        "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))), '2023-05-01').key1]",
+        "contentType": "text/plain"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('kv-seehealth-{0}', parameters('uniqueSuffix')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', format('kv-seehealth-{0}', parameters('uniqueSuffix')), 'Storage-ConnectionString')]",
+      "properties": {
+        "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix'))), '2023-01-01').keys[0].value, environment().suffixes.storage)]",
+        "contentType": "text/plain"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('kv-seehealth-{0}', parameters('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}-logs-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30,
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[format('{0}-insights-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]",
+        "RetentionInDays": 30
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('enableDataFactory')]",
+      "type": "Microsoft.DataFactory/factories",
+      "apiVersion": "2018-06-01",
+      "name": "[format('{0}-adf-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "condition": "[parameters('enableContainerRegistry')]",
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-07-01",
+      "name": "[format('seehealth{0}acr{1}', parameters('environment'), parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": true,
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]",
+      "name": "openai-diagnostics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "openAIEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "OpenAI endpoint URL"
+      },
+      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))), '2023-05-01').endpoint]"
+    },
+    "openAIResourceName": {
+      "type": "string",
+      "metadata": {
+        "description": "OpenAI resource name"
+      },
+      "value": "[format('{0}-openai-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))]"
+    },
+    "openAIKeySecretUri": {
+      "type": "string",
+      "metadata": {
+        "description": "OpenAI API key (stored in Key Vault)"
+      },
+      "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', format('kv-seehealth-{0}', parameters('uniqueSuffix')), 'OpenAI-ApiKey'), '2023-07-01').secretUri]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account name"
+      },
+      "value": "[format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix'))]"
+    },
+    "storageBlobEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account blob endpoint"
+      },
+      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', format('seehealth{0}{1}', parameters('environment'), parameters('uniqueSuffix'))), '2023-01-01').primaryEndpoints.blob]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault name"
+      },
+      "value": "[format('kv-seehealth-{0}', parameters('uniqueSuffix'))]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault URI"
+      },
+      "value": "[reference(resourceId('Microsoft.KeyVault/vaults', format('kv-seehealth-{0}', parameters('uniqueSuffix'))), '2023-07-01').vaultUri]"
+    },
+    "appInsightsInstrumentationKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights instrumentation key"
+      },
+      "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-insights-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))), '2020-02-02').InstrumentationKey]"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights connection string"
+      },
+      "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-insights-{1}', variables('resourcePrefix'), parameters('uniqueSuffix'))), '2020-02-02').ConnectionString]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace ID"
+      },
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')))]"
+    },
+    "dataFactoryName": {
+      "type": "string",
+      "metadata": {
+        "description": "Data Factory name (if enabled)"
+      },
+      "value": "[if(parameters('enableDataFactory'), format('{0}-adf-{1}', variables('resourcePrefix'), parameters('uniqueSuffix')), '')]"
+    },
+    "containerRegistryLoginServer": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Registry login server (if enabled)"
+      },
+      "value": "[if(parameters('enableContainerRegistry'), reference(resourceId('Microsoft.ContainerRegistry/registries', format('seehealth{0}acr{1}', parameters('environment'), parameters('uniqueSuffix'))), '2023-07-01').loginServer, '')]"
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource Group location"
+      },
+      "value": "[parameters('location')]"
+    },
+    "environmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Environment"
+      },
+      "value": "[parameters('environment')]"
+    }
+  }
+}
