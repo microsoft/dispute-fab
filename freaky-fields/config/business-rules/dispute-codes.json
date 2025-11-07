@@ -1,0 +1,314 @@
+{
+  "version": "1.0",
+  "description": "SeeHealth Internal Dispute Codes with Priority Rankings",
+  "resolution_rule": "When multiple codes apply to same claim, select code with LOWEST rank number (highest priority)",
+  "codes": [
+    {
+      "code": 301,
+      "description": "Excluded 340B Pharmacy",
+      "category": "Pharmacy Issue",
+      "rank": 1,
+      "priority": "CRITICAL",
+      "rules": [
+        "Check CLAIM_340B_IND flag",
+        "Validate against excluded 340B pharmacy list",
+        "Highest priority - reject immediately if found"
+      ]
+    },
+    {
+      "code": 302,
+      "description": "Government Pharmacy",
+      "category": "Pharmacy Issue",
+      "rank": 2,
+      "priority": "CRITICAL",
+      "rules": [
+        "Identify government-owned pharmacies",
+        "Apply exclusion rules for government entities"
+      ]
+    },
+    {
+      "code": 303,
+      "description": "Hospital Pharmacy",
+      "category": "Pharmacy Issue",
+      "rank": 3,
+      "priority": "CRITICAL",
+      "rules": [
+        "Detect hospital-based pharmacies",
+        "Apply institutional rules"
+      ]
+    },
+    {
+      "code": 304,
+      "description": "Long Term Care and Nursing Home Pharmacies",
+      "category": "Pharmacy Issue",
+      "rank": 4,
+      "priority": "CRITICAL",
+      "rules": [
+        "Identify LTC/Nursing home pharmacies",
+        "Apply specialized long-term care rules"
+      ]
+    },
+    {
+      "code": 305,
+      "description": "Pharmacy ID is Invalid",
+      "category": "Pharmacy Issue",
+      "rank": 5,
+      "priority": "CRITICAL",
+      "rules": [
+        "Validate pharmacy identifiers",
+        "Check against master pharmacy list",
+        "Verify NCPDP ID or NPI"
+      ]
+    },
+    {
+      "code": 306,
+      "description": "Pharmacy in Excluded List",
+      "category": "Pharmacy Issue",
+      "rank": 6,
+      "priority": "CRITICAL",
+      "rules": [
+        "Check against pharmacy exclusion list",
+        "Most common pharmacy exclusion reason"
+      ]
+    },
+    {
+      "code": 307,
+      "description": "Pharmacy in Excluded State",
+      "category": "Pharmacy Issue",
+      "rank": 7,
+      "priority": "CRITICAL",
+      "rules": [
+        "Geographic restrictions",
+        "State-level exclusions",
+        "Check pharmacy state against excluded states list"
+      ]
+    },
+    {
+      "code": 308,
+      "description": "Pharmacy Service Type is Invalid",
+      "category": "Pharmacy Issue",
+      "rank": 8,
+      "priority": "CRITICAL",
+      "rules": [
+        "Validate service type code",
+        "Check retail vs mail vs institutional classification"
+      ]
+    },
+    {
+      "code": 401,
+      "description": "Horizontal Duplicate",
+      "category": "Duplicate Issue",
+      "rank": 9,
+      "priority": "HIGH",
+      "rules": [
+        "Same claim across different channels/vendors",
+        "Cross-vendor duplicate detection",
+        "Check RX number, NDC, fill date, patient ID across sources"
+      ]
+    },
+    {
+      "code": 402,
+      "description": "Vertical Duplicate",
+      "category": "Duplicate Issue",
+      "rank": 10,
+      "priority": "HIGH",
+      "rules": [
+        "Same claim across different time periods",
+        "Cross-period duplicate detection",
+        "Check same submitter, different files"
+      ]
+    },
+    {
+      "code": 403,
+      "description": "Internal Duplicate (DUP)",
+      "category": "Duplicate Issue",
+      "rank": 11,
+      "priority": "HIGH",
+      "rules": [
+        "Duplicate within same file/submission",
+        "Same submitter, same file",
+        "Check claim IDs and transaction IDs"
+      ]
+    },
+    {
+      "code": 404,
+      "description": "Coordination of Benefits",
+      "category": "Duplicate Issue",
+      "rank": 12,
+      "priority": "HIGH",
+      "rules": [
+        "COB duplicate scenarios",
+        "Multiple payer coordination",
+        "Check for claims submitted to multiple payers"
+      ]
+    },
+    {
+      "code": 101,
+      "description": "Aberrant Quantity",
+      "category": "Claim Issue",
+      "rank": 13,
+      "priority": "MEDIUM",
+      "rules": [
+        "Unusually high quantities",
+        "Statistical outlier detection",
+        "Compare quantity against historical averages"
+      ]
+    },
+    {
+      "code": 102,
+      "description": "Days Supply is Invalid",
+      "category": "Claim Issue",
+      "rank": 14,
+      "priority": "MEDIUM",
+      "rules": [
+        "Days supply missing or unreasonable",
+        "Validate against standard ranges (1-90 typical)",
+        "Check for negative or zero values"
+      ]
+    },
+    {
+      "code": 103,
+      "description": "Units per Day Exceeds Limit",
+      "category": "Claim Issue",
+      "rank": 15,
+      "priority": "MEDIUM",
+      "rules": [
+        "Calculate units/day ratio",
+        "Compare against drug-specific thresholds",
+        "Quantity divided by days supply exceeds maximum"
+      ]
+    },
+    {
+      "code": 104,
+      "description": "RX ID is invalid",
+      "category": "Claim Issue",
+      "rank": 16,
+      "priority": "MEDIUM",
+      "rules": [
+        "Missing or invalid prescription number",
+        "Required field validation",
+        "Check RX number format and presence"
+      ]
+    },
+    {
+      "code": 201,
+      "description": "Formulary Non-Compliance",
+      "category": "Contracting Issue",
+      "rank": 17,
+      "priority": "LOWER",
+      "rules": [
+        "Cross-reference FORMULARY_TYPE_CDE",
+        "Check coverage tiers",
+        "Identify non-covered drugs",
+        "Validate formulary status at time of fill"
+      ]
+    },
+    {
+      "code": 202,
+      "description": "Plan ID is Invalid",
+      "category": "Contracting Issue",
+      "rank": 18,
+      "priority": "LOWER",
+      "rules": [
+        "Validate plan identifiers",
+        "Check plan eligibility dates",
+        "Verify plan is active for fill date"
+      ]
+    },
+    {
+      "code": 203,
+      "description": "Product Date Range",
+      "category": "Contracting Issue",
+      "rank": 19,
+      "priority": "LOWER",
+      "rules": [
+        "Verify product effective/expiration dates",
+        "Check contract term alignment",
+        "Ensure fill date within product coverage period"
+      ]
+    },
+    {
+      "code": 204,
+      "description": "Product ID or NDC is Invalid",
+      "category": "Contracting Issue",
+      "rank": 20,
+      "priority": "LOWER",
+      "rules": [
+        "Validate NDC format (11 digits)",
+        "Check NDC existence in drug database",
+        "Verify product coverage in contract"
+      ]
+    },
+    {
+      "code": 205,
+      "description": "Rebate Rate is Invalid",
+      "category": "Contracting Issue",
+      "rank": 21,
+      "priority": "LOWER",
+      "rules": [
+        "Verify rebate percentage",
+        "Check against contracted rates",
+        "Validate rebate calculation"
+      ]
+    },
+    {
+      "code": 501,
+      "description": "Claims from Prior Quarters",
+      "category": "Datafix Issue",
+      "rank": 22,
+      "priority": "LOWEST",
+      "rules": [
+        "Fill date outside current period",
+        "Lookback period violations",
+        "Check if claim is too old for current submission"
+      ]
+    },
+    {
+      "code": 502,
+      "description": "Prior Exclusion Credit",
+      "category": "Datafix Issue",
+      "rank": 23,
+      "priority": "LOWEST",
+      "rules": [
+        "Previously excluded claim correction",
+        "Adjustment/reversal handling",
+        "Credit for prior exclusion"
+      ]
+    }
+  ],
+  "priority_groups": {
+    "CRITICAL": {
+      "ranks": [1, 2, 3, 4, 5, 6, 7, 8],
+      "codes": [301, 302, 303, 304, 305, 306, 307, 308],
+      "description": "Pharmacy Issues - Fundamental eligibility problems that immediately disqualify claims"
+    },
+    "HIGH": {
+      "ranks": [9, 10, 11, 12],
+      "codes": [401, 402, 403, 404],
+      "description": "Duplicate Issues - Prevent double payment scenarios"
+    },
+    "MEDIUM": {
+      "ranks": [13, 14, 15, 16],
+      "codes": [101, 102, 103, 104],
+      "description": "Claim Issues - Quantity and data validation problems"
+    },
+    "LOWER": {
+      "ranks": [17, 18, 19, 20, 21],
+      "codes": [201, 202, 203, 204, 205],
+      "description": "Contracting Issues - Coverage and eligibility verification"
+    },
+    "LOWEST": {
+      "ranks": [22, 23],
+      "codes": [501, 502],
+      "description": "Datafix Issues - Timing and correction scenarios"
+    }
+  },
+  "source_of_truth_columns": {
+    "BDRO_CATEGORY_ID": "Primary dispute category from source of truth",
+    "BDRO_RULE_ID": "Specific rule triggered from source of truth",
+    "SERVICE_TYPE_CDE": "R=Retail, M=Mail, I=Institutional, X=Other",
+    "EXCLUSION_TYPE_CDE": "Exclusion reason indicator",
+    "FORMULARY_TYPE_CDE": "Formulary tier (0-5)",
+    "CLAIM_340B_IND": "340B program indicator"
+  }
+}
