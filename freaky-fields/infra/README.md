@@ -1,34 +1,177 @@
-# Azure Infrastructure for SeeHealth AI Claims Triage
+# Minimal Azure OpenAI Infrastructure
 
-**Last Updated:** November 5, 2025
+**Last Updated:** November 13, 2025
 
-This directory contains Infrastructure as Code (IaC) using Azure Bicep to deploy Azure infrastructure for the claims triage platform.
+This directory now contains a **single minimal Bicep template** plus helper scripts. It deploys **only an Azure OpenAI account** and (optionally) two model deployments. All prior extras (Key Vault, Storage, Log Analytics, App Insights, etc.) have been removed for simplicity.
 
 ## 📁 Structure
 
 ```
 infra/
-├── main.bicep                  # Simplified Bicep template (Azure OpenAI + Key Vault)
-├── main.parameters.json        # Parameters file (customize before deployment)
-├── deploy.sh                   # Automated deployment script
-├── cleanup.sh                  # Cleanup/teardown script
-└── README.md                   # This file
+├── main.bicep    # Single source template (Azure OpenAI + optional models)
+├── deploy.sh     # Provision RG + template + write .env
+├── cleanup.sh    # Tear down RG or just OpenAI account
+├── update-env.sh # Refresh .env from existing deployment
+└── README.md     # This file
 ```
 
-## 🎯 Current State (November 2025)
+## 🎯 What Can Be Deployed
 
-### Currently Deployed & Active:
-1. **Azure OpenAI** - GPT-5-mini deployment for claim summarization
-   - Resource: `Microsoft.CognitiveServices/accounts`
-   - Deployment: `gpt-5-mini` (env var: AZURE_OPENAI_DEPLOYMENT_GPT5)
-   - Model: `gpt-5-mini` (2024-08-01-preview)
-   - Capacity: 120K TPM
+Base:
+1. Azure OpenAI account (S0)
 
-### Not Currently Used
-- Local development uses direct Azure OpenAI API calls
-- FastAPI runs locally (`uvicorn api_server:app`)
-- React frontend runs on Vite dev server (`:5173`)
-- Data processing uses local files in `data/` and `outputs/`
+Optional (controlled by `deployModels` parameter):
+2. `gpt-5-mini` (model: gpt-5-mini version 2025-08-07)
+3. `gpt-4o` (model: gpt-4o version 2024-11-20)
+
+Pass `deployModels=false` if you only want the account + keys and will add deployments later (CLI / Portal).
+
+## 🧩 Bicep Parameters (main.bicep)
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| environment | string | `dev` | Environment label used in naming |
+| location | string | `resourceGroup().location` | Azure region |
+| uniqueSuffix | string | `uniqueString(resourceGroup().id)` | Deterministic suffix per RG |
+| openAIAccountBaseName | string | `openai` | Base prefix for account name |
+| deployModels | bool | `true` | Whether to deploy the two model deployments |
+
+Resulting account name pattern: `openai-<env>-<suffix>` (lowercased, underscores swapped to hyphens).
+
+## 🚀 Quick Start (Scripted)
+
+```bash
+cd infra
+# Provision with models
+./deploy.sh dev eastus
+
+# Provision without model deployments (account only)
+DEPLOY_MODELS=false ./deploy.sh dev eastus
+```
+
+The script writes a canonical `.env` with:
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_RESOURCE_NAME`
+- `AZURE_OPENAI_DEPLOYMENT_GPT5` (blank if models disabled)
+- `AZURE_OPENAI_DEPLOYMENT_GPT4O` (blank if models disabled)
+- `AZURE_OPENAI_API_KEY` (primary key)
+- `AZURE_SUBSCRIPTION_ID`, `AZURE_LOCATION`, `AZURE_ENVIRONMENT`
+
+## 🛠️ Quick Start (Manual CLI)
+
+```bash
+# 1. Create resource group
+az group create --name rg-openai-dev --location eastus
+
+# 2. Deploy WITH models
+az deployment group create \
+  --name openaiDeploy \
+  --resource-group rg-openai-dev \
+  --template-file infra/main.bicep \
+  --parameters environment=dev location=eastus deployModels=true
+
+# OR deploy WITHOUT models
+az deployment group create \
+  --name openaiDeploy \
+  --resource-group rg-openai-dev \
+  --template-file infra/main.bicep \
+  --parameters environment=dev location=eastus deployModels=false
+```
+
+## 🔑 Retrieve API Keys
+
+```bash
+RESOURCE_NAME=$(az deployment group show \
+  --name openaiDeploy \
+  --resource-group rg-openai-dev \
+  --query properties.outputs.openAIResourceName.value -o tsv)
+
+az cognitiveservices account keys list \
+  --name "$RESOURCE_NAME" \
+  --resource-group rg-openai-dev \
+  --query key1 -o tsv
+```
+
+## 📦 Adding Models Later (If You Skipped Them)
+
+```bash
+RESOURCE_NAME=your-account-name
+RG=rg-openai-dev
+
+# Add gpt-5-mini
+az cognitiveservices account deployment create \
+  --resource-group $RG \
+  --name $RESOURCE_NAME \
+  --deployment-name gpt-5-mini \
+  --model-format OpenAI \
+  --model-name gpt-5-mini \
+  --model-version 2025-08-07 \
+  --sku-name GlobalStandard --sku-capacity 120
+
+# Add gpt-4o
+az cognitiveservices account deployment create \
+  --resource-group $RG \
+  --name $RESOURCE_NAME \
+  --deployment-name gpt-4o \
+  --model-format OpenAI \
+  --model-name gpt-4o \
+  --model-version 2024-11-20 \
+  --sku-name GlobalStandard --sku-capacity 80
+```
+
+## 🧪 Testing Environment Variables
+
+```bash
+source .env
+echo $AZURE_OPENAI_ENDPOINT
+python - <<'PY'
+import os
+print('Endpoint:', os.getenv('AZURE_OPENAI_ENDPOINT'))
+print('GPT-5 mini deployment:', os.getenv('AZURE_OPENAI_DEPLOYMENT_GPT5'))
+print('GPT-4o deployment:', os.getenv('AZURE_OPENAI_DEPLOYMENT_GPT4O'))
+PY
+```
+
+## 🧹 Cleanup
+
+Use script (safer prompts):
+```bash
+cd infra
+# Dry run
+./cleanup.sh --dry-run rg-openai-dev
+# Delete only OpenAI account (keep RG)
+./cleanup.sh --only-openai rg-openai-dev
+# Delete entire resource group
+./cleanup.sh rg-openai-dev --yes
+```
+
+Manual:
+```bash
+az group delete --name rg-openai-dev --yes --no-wait
+```
+
+## ⚠️ Notes
+
+- Outputs `gpt5miniDeploymentName` / `gpt4oDeploymentName` will be blank strings if `deployModels=false`.
+- You can safely re-run deployment; account name stays consistent (`uniqueSuffix` derived from RG id).
+- To rotate keys: `az cognitiveservices account keys regenerate --key-type primary`.
+
+## ❓ Troubleshooting
+
+```bash
+# Show deployment error details
+az deployment group show --name openaiDeploy --resource-group rg-openai-dev --query properties.error
+
+# List deployments
+az cognitiveservices account deployment list --name <resource-name> --resource-group rg-openai-dev -o table
+```
+
+## ✅ Summary
+
+Single minimal template retained (`main.bicep`). Optional model deployments controlled by `deployModels`. Helper scripts manage lifecycle & env vars. No extraneous Azure resources.
+
+---
+Minimal OpenAI Infra • Deterministic • Auditable
 
 ## 🚀 Quick Start
 
@@ -36,18 +179,22 @@ infra/
 
 1. **Azure CLI** installed ([Install Guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli))
 2. **Azure Subscription** with appropriate permissions
-3. **Bash shell** (macOS/Linux/WSL)
+3. **Logged in:** `az login`
 
-### Deploy Minimal Infrastructure (Azure OpenAI + Key Vault)
+### Deploy Infrastructure
 
 ```bash
 # Navigate to infra directory
 cd infra
 
-# Make deploy script executable
-chmod +x deploy.sh
+# Deploy to development environment
+./deploy.sh dev eastus
 
-# Deploy to development environment (minimal setup)
+# The script will:
+# 1. Create resource group
+# 2. Deploy Azure OpenAI with models
+# 3. Retrieve API keys
+# 4. Ask if you want to update .env file automatically
 ./deploy.sh dev eastus your-email@example.com
 
 # Deploy with App Service for production hosting
